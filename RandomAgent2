@@ -1,0 +1,200 @@
+import java.util.*;
+public class RandomAgent2 implements MSWAgent {
+
+	public static final int LEADER = 0;
+	public static final int LEFT = 1;
+	public static final int RIGHT = 2;
+	
+	public String agentLeft, agentRight;
+	public int role;
+	public ArrayList<Card> playedI, playedAgentLeft, playedAgentRight;	// these lists used to track the history of each trick
+																		// which will help later on to improve on the game and
+																		// make the decisions based on what been played
+
+	private List<Card> hand, handS, handD, handC, handH;
+	@SuppressWarnings("unused")
+	private boolean spadeValuable = false;
+	private Random rand = new Random();
+	
+	@SuppressWarnings("unused")
+	private Map<String, Integer> scoreboard; //a map from names to scores
+	
+	// STATIC SET OF CHARACTERS
+	protected static ArrayList<String> chars = new ArrayList<>(Arrays.asList("A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z"));
+
+	public void setup(String agentLeft, String agentRight) {
+		this.agentLeft = agentLeft;
+		this.agentRight = agentRight;
+		playedI = new ArrayList<> ();
+		playedAgentLeft = new ArrayList<> ();
+		playedAgentRight = new ArrayList<> ();
+	}
+
+	public void seeHand(List<Card> hand, int order) {
+		this.hand = hand;
+		this.role = order;
+		splitHand();
+		setSpadeValuable();
+	}
+	
+	private void splitHand() {
+		handS = new ArrayList<> ();
+		handD = new ArrayList<> ();
+		handC = new ArrayList<> ();
+		handH = new ArrayList<> ();
+		for (int index = 0 ; index < hand.size() ; index++) {
+			Suit suit = hand.get(index).suit;
+			if (suit == Suit.SPADES) handS.add(hand.get(index));
+			else if (suit == Suit.DIAMONDS) handD.add(hand.get(index));
+			else if (suit == Suit.CLUBS) handC.add(hand.get(index));
+			else if (suit == Suit.HEARTS) handH.add(hand.get(index));
+		}
+	}
+	
+	public Card[] discard() {
+		Card[] discard = new Card[4];
+		for (int i = 0; i < 4; i++) {
+			discard[i] = getHighestCard(true);
+			removeCardGlobally(discard[i]);
+		}
+		return discard;
+	}
+	
+	public void seeCard(Card card, String agent) {
+		if (agent == agentLeft)
+			playedAgentLeft.add(card);
+		else if (agent == agentRight)
+			playedAgentRight.add(card);
+	}
+
+	public void seeResult(String winner) {
+		if (winner == agentLeft) role = RIGHT;
+		else if (winner == agentRight) role = LEFT;
+		else role = LEADER;
+	}
+
+	public void seeScore(Map<String, Integer> scoreboard) {
+		this.scoreboard = scoreboard;
+	}
+
+	public String sayName() {
+		String name = "";
+		int random = rand.nextInt(chars.size()); // generate single random number rather than multiple to reduce time
+		for (int i = 1; i <= 6; i++) {
+			random = (random*i)%chars.size(); // randomizing siblings and retaining index < max array size    
+			name += chars.get(random);
+			chars.remove(random); // remove the used character to make sure names wont be repeated in any way
+		}
+		return name;
+	}
+
+	public Card playCard() {
+		Card card = null;
+		Card c1;
+		if (role == LEADER) {
+			card = getLowestCard(true);
+		}
+		else if (role == LEFT || role == RIGHT) {
+			Card holder;
+			c1 = playedAgentRight.get(playedAgentRight.size()-1);
+			holder = getLowestCardInSuit(c1.suit);
+			if (holder == null) card = getLowestCard(true);
+			else card = holder;
+			holder = null;
+		}
+		removeCardGlobally(card);
+		return card;
+	}
+	
+	
+	
+	public boolean isCardHigher(Card a, Card b, boolean suitMatter) { // a > b
+		if (suitMatter) // when suit matters then spade has higher value than others
+			return (a.rank > b.rank && a.suit == b.suit) || (a.suit == Suit.SPADES && a.suit != b.suit);
+		else return (a.rank > b.rank); // else just compare rankings
+	}
+	
+	private void removeCardGlobally(Card card) {
+		hand.remove(card);
+		if (card.suit == Suit.SPADES) handS.remove(card);
+		else if (card.suit == Suit.DIAMONDS) handD.remove(card);
+		else if (card.suit == Suit.CLUBS) handC.remove(card);
+		else if (card.suit == Suit.HEARTS) handH.remove(card);
+	}
+	
+	@SuppressWarnings("unused")
+	private Card getHigherThanInSameSuit(Card card) { // NOTICE THIS IS RESTRICTED TO THE SAME SUIT
+		List<Card> handSuit;
+		if (card.suit == Suit.SPADES && handS.size() > 0) handSuit = handS;
+		else if (card.suit == Suit.DIAMONDS && handD.size() > 0) handSuit = handD;
+		else if (card.suit == Suit.CLUBS && handC.size() > 0) handSuit = handC;
+		else if (card.suit == Suit.HEARTS && handH.size() > 0) handSuit = handH;
+		else return null;
+		for (int i = handSuit.size()-1 ; i >= 0 ; i--) {
+			if (handSuit.get(i).rank > card.rank) return handSuit.get(i); 
+		}
+		return handSuit.get(0); // this function is built assuming that we have card from the same suit and card at 0 is higher than the opponent card
+	}
+	
+	private Card getLowestCard(boolean withS) {
+		ArrayList<Card> cards = new ArrayList<>();
+		if (getLowestCardInSuit(Suit.SPADES) != null && withS) cards.add(getLowestCardInSuit(Suit.SPADES));
+		if (getLowestCardInSuit(Suit.DIAMONDS) != null) cards.add(getLowestCardInSuit(Suit.DIAMONDS));
+		if (getLowestCardInSuit(Suit.CLUBS) != null) cards.add(getLowestCardInSuit(Suit.CLUBS));
+		if (getLowestCardInSuit(Suit.HEARTS) != null) cards.add(getLowestCardInSuit(Suit.HEARTS));
+		
+		if (cards.size() == 1) return cards.get(0);
+		int bottom = 0;
+		if (cards.size() > 1)
+			bottom = cards.get(bottom).rank < cards.get(1).rank ? bottom:1;
+		if (cards.size() > 2)
+			bottom = cards.get(bottom).rank < cards.get(2).rank ? bottom:2;
+		if (cards.size() > 3)
+			bottom = cards.get(bottom).rank < cards.get(3).rank ? bottom:3;
+		return cards.get(bottom);
+	}
+	
+	private Card getHighestCard(boolean withS) {
+		ArrayList<Card> cards = new ArrayList<>();
+		if (getLowestCardInSuit(Suit.SPADES) != null && withS) cards.add(getHighestCardInSuit(Suit.SPADES));
+		if (getLowestCardInSuit(Suit.DIAMONDS) != null) cards.add(getHighestCardInSuit(Suit.DIAMONDS));
+		if (getLowestCardInSuit(Suit.CLUBS) != null) cards.add(getHighestCardInSuit(Suit.CLUBS));
+		if (getLowestCardInSuit(Suit.HEARTS) != null) cards.add(getHighestCardInSuit(Suit.HEARTS));
+		
+		if (cards.size() == 1) return cards.get(0);
+		int peak = 0;
+		if (cards.size() > 1)
+			peak = cards.get(peak).rank > cards.get(1).rank ? peak:1;
+		if (cards.size() > 2)
+			peak = cards.get(peak).rank > cards.get(2).rank ? peak:2;
+		if (cards.size() > 3)
+			peak = cards.get(peak).rank > cards.get(3).rank ? peak:3;
+		return cards.get(peak);
+	}
+	
+
+	private Card getLowestCardInSuit(Suit suit) {
+		if (suit == Suit.SPADES && handS.size() > 0) return handS.get(handS.size() - 1);
+		else if (suit == Suit.DIAMONDS && handD.size() > 0) return handD.get(handD.size() - 1);
+		else if (suit == Suit.CLUBS && handC.size() > 0) return handC.get(handC.size() - 1);
+		else if (suit == Suit.HEARTS && handH.size() > 0) return handH.get(handH.size() - 1);
+		return null;
+	}
+	
+	
+	private Card getHighestCardInSuit(Suit suit) {
+		if (suit == Suit.SPADES && handS.size() > 0) return handS.get(0);
+		else if (suit == Suit.DIAMONDS && handD.size() > 0) return handD.get(0);
+		else if (suit == Suit.CLUBS && handC.size() > 0) return handC.get(0);
+		else if (suit == Suit.HEARTS && handH.size() > 0) return handH.get(0);
+		return null;
+	}
+	
+	private void setSpadeValuable() {
+		int value = 0;
+		for (Card s : handS)
+			value += s.rank;
+		spadeValuable = value >= 65;
+	}
+
+}
